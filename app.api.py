@@ -465,11 +465,12 @@ with st.sidebar:
                             type="password", help="也可用环境变量 VISION_API_KEY 配置")
     st.session_state.api_key = api_key
     st.caption("未配置时无法拍照识别，可改用手动录入。")
-    if st.button("🗑 清除我的饮食记录"):
-        if username in st.session_state.all_records:
-            del st.session_state.all_records[username]
+    if st.button("🗑 清除我今天的所有记录"):
+        today = dt.date.today().isoformat()
+        if username in st.session_state.all_records and today in st.session_state.all_records[username]:
+            del st.session_state.all_records[username][today]
             save_records(st.session_state.all_records)
-        st.success("已清除你的记录")
+        st.success("已清除今天的记录")
 
 # 当前用户的记录视图
 user_records = st.session_state.all_records.get(username, {}) if username else {}
@@ -606,9 +607,17 @@ with tab2:
             ratio = min(now / tgt, 1.0) if tgt else 0
             st.progress(ratio, text=f"{label} {now}g / {tgt}g（{ratio*100:.0f}%）")
 
-        st.markdown("**各餐热量分布**")
+        st.markdown("**各餐记录（可逐条删除）**")
         st.bar_chart(pd.DataFrame(meal_rows).set_index("餐次")[["kcal"]])
-        st.dataframe(pd.DataFrame(meal_rows), width="stretch")
+        for i, r in enumerate(today_records):
+            col_m, col_d = st.columns([5, 1])
+            col_m.write(f"**{r['meal']}** {r['time']} ｜ 热量 {r['totals']['kcal']:.0f} kcal ｜ 蛋白 {r['totals']['protein']:.1f}g")
+            if col_d.button("🗑 删除", key=f"del_{today}_{i}"):
+                del st.session_state.all_records[username][today][i]
+                if not st.session_state.all_records[username][today]:
+                    del st.session_state.all_records[username][today]
+                save_records(st.session_state.all_records)
+                st.rerun()
 
 # ── Tab3 食堂推荐 ───────────────────────────────────────────────
 with tab3:
