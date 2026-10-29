@@ -391,8 +391,8 @@ def save_records(records: dict):
 st.set_page_config(page_title="AI饮食健康智能推荐系统", page_icon="🍱", layout="wide")
 
 # 初始化状态
-if "records" not in st.session_state:
-    st.session_state.records = load_records()
+if "all_records" not in st.session_state:
+    st.session_state.all_records = load_records()
 if "api_key" not in st.session_state:
     st.session_state.api_key = VISION_API_KEY
 if "last_result" not in st.session_state:
@@ -401,6 +401,10 @@ if "last_result" not in st.session_state:
 # ── 侧边栏：个人档案 + API 配置 ────────────────────────────────
 with st.sidebar:
     st.header("👤 个人档案")
+    username = st.text_input("你的名字（用于区分数据）", value="", placeholder="输入名字后回车")
+    if not username:
+        st.warning("请先输入你的名字，记录才会保存到你的账号下")
+    st.divider()
     gender = st.radio("性别", ["男", "女"], horizontal=True)
     age = st.slider("年龄", 10, 60, 20)
     col1, col2 = st.columns(2)
@@ -415,11 +419,14 @@ with st.sidebar:
                             type="password", help="也可用环境变量 VISION_API_KEY 配置")
     st.session_state.api_key = api_key
     st.caption("未配置时无法拍照识别，可改用手动录入。")
-    if st.button("🗑 清除全部饮食记录"):
-        st.session_state.records = {}
-        if os.path.exists(RECORD_FILE):
-            os.remove(RECORD_FILE)
-        st.success("已清除")
+    if st.button("🗑 清除我的饮食记录"):
+        if username in st.session_state.all_records:
+            del st.session_state.all_records[username]
+            save_records(st.session_state.all_records)
+        st.success("已清除你的记录")
+
+# 当前用户的记录视图
+user_records = st.session_state.all_records.get(username, {}) if username else {}
 
 # 个人目标
 target = calc_target(gender, age, height_cm, weight_kg, activity, goal)
@@ -503,8 +510,10 @@ with tab1:
             today = dt.date.today().isoformat()
             record = {"meal": meal_choice, "time": dt.datetime.now().strftime("%H:%M"),
                       "items": details, "totals": totals}
-            st.session_state.records.setdefault(today, []).append(record)
-            save_records(st.session_state.records)
+            # 按用户名隔离保存
+            st.session_state.all_records.setdefault(username, {})
+            st.session_state.all_records[username].setdefault(today, []).append(record)
+            save_records(st.session_state.all_records)
 
             st.success(f"已保存至 {today} 的 {meal_choice}")
 
@@ -526,7 +535,7 @@ with tab1:
 # ── Tab2 营养统计 ───────────────────────────────────────────────
 with tab2:
     today = dt.date.today().isoformat()
-    today_records = st.session_state.records.get(today, [])
+    today_records = user_records.get(today, [])
     st.subheader(f"今日营养汇总（{today}，已记录 {len(today_records)} 餐）")
     if not today_records:
         st.info("今天还没有记录，去「饮食记录」拍照或手动录一餐吧")
@@ -575,15 +584,15 @@ with tab3:
 # ── Tab4 每周报告 ───────────────────────────────────────────────
 with tab4:
     st.subheader("近 7 天饮食报告")
-    if not st.session_state.records:
+    if not user_records:
         st.info("暂无记录，先坚持记录几天就能生成周报告了")
     else:
-        dates = sorted(st.session_state.records.keys(), reverse=True)[:7]
+        dates = sorted(user_records.keys(), reverse=True)[:7]
         rows = []
         for d in dates:
             day_totals = {}
             n_meals = 0
-            for r in st.session_state.records[d]:
+            for r in user_records[d]:
                 for k, v in r["totals"].items():
                     day_totals[k] = day_totals.get(k, 0.0) + v
                 n_meals += 1
