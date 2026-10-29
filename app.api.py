@@ -39,6 +39,7 @@ import streamlit as st
 # ══════════════════════════════════════════════════════════════════
 RECORD_FILE = "diet_records.json"          # 饮食记录持久化文件（与脚本同目录）
 NUTRITION_CACHE_FILE = "nutrition_cache.json"  # API 营养补全缓存（同种食物只调一次 API）
+PROFILE_FILE = "user_profiles.json"       # 用户个人档案（按用户名保存基本信息）
 VISION_API_KEY = os.getenv("VISION_API_KEY", "")   # 豆包视觉大模型 Key
 VISION_API_BASE = os.getenv("VISION_API_BASE", "https://ark.cn-beijing.volces.com/api/v3")
 VISION_MODEL = os.getenv("VISION_MODEL", "ep-20261028170459-nb7px")
@@ -385,6 +386,25 @@ def save_records(records: dict):
         json.dump(records, f, ensure_ascii=False, indent=2)
 
 
+def load_profiles() -> dict:
+    """加载所有用户的个人档案"""
+    if os.path.exists(PROFILE_FILE):
+        try:
+            with open(PROFILE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def save_profile(username: str, profile: dict):
+    """保存某个用户的个人档案"""
+    profiles = load_profiles()
+    profiles[username] = profile
+    with open(PROFILE_FILE, "w", encoding="utf-8") as f:
+        json.dump(profiles, f, ensure_ascii=False, indent=2)
+
+
 # ══════════════════════════════════════════════════════════════════
 # 七、Streamlit 界面
 # ══════════════════════════════════════════════════════════════════
@@ -393,6 +413,8 @@ st.set_page_config(page_title="AI饮食健康智能推荐系统", page_icon="�
 # 初始化状态
 if "all_records" not in st.session_state:
     st.session_state.all_records = load_records()
+if "all_profiles" not in st.session_state:
+    st.session_state.all_profiles = load_profiles()
 if "api_key" not in st.session_state:
     st.session_state.api_key = VISION_API_KEY
 if "last_result" not in st.session_state:
@@ -401,17 +423,41 @@ if "last_result" not in st.session_state:
 # ── 侧边栏：个人档案 + API 配置 ────────────────────────────────
 with st.sidebar:
     st.header("👤 个人档案")
-    username = st.text_input("你的名字（用于区分数据）", value="", placeholder="输入名字后回车")
+
+    # 用户名输入：输入后自动加载该用户的历史档案
+    def _on_username_change():
+        uname = st.session_state.get("username_input", "")
+        prof = st.session_state.all_profiles.get(uname, {})
+        if prof:
+            st.session_state["gender"] = prof.get("gender", "女")
+            st.session_state["age"] = prof.get("age", 20)
+            st.session_state["height_cm"] = prof.get("height_cm", 165.0)
+            st.session_state["weight_kg"] = prof.get("weight_kg", 55.0)
+            st.session_state["activity"] = prof.get("activity", "久坐（少运动）")
+            st.session_state["goal"] = prof.get("goal", "均衡饮食")
+            st.success(f"已自动调出「{uname}」的档案")
+
+    username = st.text_input("你的名字（输入后自动调出档案）", key="username_input",
+                             value="", placeholder="输入名字后回车", on_change=_on_username_change)
+
     if not username:
-        st.warning("请先输入你的名字，记录才会保存到你的账号下")
+        st.warning("请先输入你的名字")
     st.divider()
-    gender = st.radio("性别", ["男", "女"], horizontal=True)
-    age = st.slider("年龄", 10, 60, 20)
+
+    gender = st.radio("性别", ["男", "女"], horizontal=True, key="gender")
+    age = st.slider("年龄", 10, 60, 20, key="age")
     col1, col2 = st.columns(2)
-    height_cm = col1.number_input("身高(cm)", 100.0, 250.0, 170.0, step=0.5)
-    weight_kg = col2.number_input("体重(kg)", 30.0, 300.0, 60.0, step=0.5)
-    activity = st.selectbox("活动量", list(ACTIVITY_FACTOR.keys()))
-    goal = st.selectbox("饮食目标", list(GOAL_ADJUST.keys()))
+    height_cm = col1.number_input("身高(cm)", 100.0, 250.0, 165.0, step=0.5, key="height_cm")
+    weight_kg = col2.number_input("体重(kg)", 30.0, 300.0, 55.0, step=0.5, key="weight_kg")
+    activity = st.selectbox("活动量", list(ACTIVITY_FACTOR.keys()), key="activity")
+    goal = st.selectbox("饮食目标", list(GOAL_ADJUST.keys()), key="goal")
+
+    # 自动保存当前用户的档案（只要填了名字）
+    if username:
+        save_profile(username, {
+            "gender": gender, "age": age, "height_cm": height_cm,
+            "weight_kg": weight_kg, "activity": activity, "goal": goal
+        })
 
     st.divider()
     st.header("🔑 识别 API")
