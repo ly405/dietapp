@@ -154,7 +154,7 @@ def recognize_food(image_bytes: bytes, api_key: str) -> List[dict]:
         payload["thinking"] = {"type": "disabled"}   # 深度思考模型：关思考，直出 JSON，快且省 token
     resp = httpx.post(f"{VISION_API_BASE}/chat/completions",
                       headers={"Authorization": f"Bearer {api_key}"},
-                      json=payload, timeout=60)
+                      json=payload, timeout=120)
     resp.raise_for_status()
     content = resp.json()["choices"][0]["message"]["content"].strip()
     if content.startswith("```"):
@@ -222,7 +222,7 @@ def complete_nutrition_via_api(names: List[str], api_key: str) -> Dict[str, dict
         payload["thinking"] = {"type": "disabled"}   # 深度思考模型：关思考直出 JSON
     resp = httpx.post(f"{VISION_API_BASE}/chat/completions",
                       headers={"Authorization": f"Bearer {api_key}"},
-                      json=payload, timeout=60)
+                      json=payload, timeout=120)
     resp.raise_for_status()
     content = resp.json()["choices"][0]["message"]["content"].strip()
     if content.startswith("```"):
